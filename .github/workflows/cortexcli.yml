@@ -60,7 +60,7 @@ jobs:
     # Handle the SARIF results
     - name: Upload SARIF file
       id: upload
-      uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e
+      uses: github/codeql-action/upload-sarif@v2
       if: success() || failure()
       with:
         sarif_file: results.sarif
@@ -68,7 +68,7 @@ jobs:
         
     - name: Dismiss alerts
       if: github.ref == 'refs/heads/main'
-      uses: advanced-security/dismiss-alerts@046d6b48d2e43cf563f96f67332c47c432eff83e
+      uses: advanced-security/dismiss-alerts@v1
       with:
         # specify a 'sarif-id' and directory containing SARIF files
         sarif-id: ${{ steps.upload.outputs.sarif-id }}
