@@ -56,24 +56,22 @@ jobs:
           --create-repo-if-missing \
           --output sarif \
           --output-file-path "results.sarif"
+          echo "Updating the output to be supported by the sarif upload"
+          jq '(.runs[].results[]?.suppressions[]?.kind) = "external"' results.sarif > tmp_results.sarif 
+          mv tmp_results.sarif results.sarif
     
     # Handle the SARIF results
-    - uses: actions/upload-artifact@v7
-      with:
-        name: results
-        path: results.sarif
-        
     - name: Upload SARIF file
       id: upload
-      uses: github/codeql-action/upload-sarif@v2
+      uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e
       if: success() || failure()
       with:
         sarif_file: results.sarif
         wait-for-processing: true
-    
+        
     - name: Dismiss alerts
       if: github.ref == 'refs/heads/main'
-      uses: advanced-security/dismiss-alerts@v1
+      uses: advanced-security/dismiss-alerts@046d6b48d2e43cf563f96f67332c47c432eff83e
       with:
         # specify a 'sarif-id' and directory containing SARIF files
         sarif-id: ${{ steps.upload.outputs.sarif-id }}
