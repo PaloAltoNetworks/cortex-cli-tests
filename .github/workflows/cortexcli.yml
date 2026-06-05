@@ -1,27 +1,25 @@
 name: CortexCLI Scan
 
+permissions:
+  id-token: write      # Your custom permission
+  contents: read       # REQUIRED for actions/checkout
+
 on:
-  pull_request:
-    branches: [main]
   push:
-    branches: [main]
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
-  
+    
 jobs:
   cortexcli:
-    permissions:
-      contents: read # for actions/checkout to fetch code
-      security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
-      actions: read # only required for a private repository by github/codeql-action/upload-sarif to get the Action run status
-      
     runs-on: ubuntu-latest
     environment: Cortex
     env:
       CORTEX_API_KEY: ${{ secrets.CORTEX_API_KEY }}
       CORTEX_API_KEY_ID: ${{ secrets.CORTEX_API_KEY_ID }}
-      CORTEX_API_BASE_URL: ${{ secrets.CORTEX_API_BASE_URL }}
+      CORTEX_API_BASE_URL: ${{ secrets.CORTEX_API_BASE_URL || secrets.CORTEX_API_URL }}
+      OUTPUT_FILE: "results.json"
+      IMAGE_NAME: "twistlock-updater:latest"
 
     steps:
     # Initial Setup
@@ -35,47 +33,39 @@ jobs:
         curl -o cortexcli $crtx_url
         chmod +x cortexcli
         ./cortexcli --version
-        
-    # Do AppSec Code Scanning
-    - name: Set up Node.js
-      uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-      with:
-        node-version: 22
-
-    - name: Verify Node.js Version
-      run: node -v
+  
+    # Do CWP image scanning
+    - name: CWP Image Scan Dependency
+      run: sudo apt install libhyperscan5 jq -y
       
-    - name: Run Cortex CLI Code Scan
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5
+
+    - name: Build Image
       run: |
-        ./cortexcli \
-          code scan \
-          --directory "${{github.workspace}}" \
-          --repo-id "${{github.repository}}" \
-          --branch "${{github.ref_name}}" \
-          --source "GITHUB_ACTIONS" \
-          --create-repo-if-missing \
-          --output sarif \
-          --output-file-path "results.sarif"
-          echo "Improve output"
-          jq '(.runs[].tool.driver.rules[]? | select(.helpUri != null)) |= (.help.markdown = (.help.text + "\n\n**More Info:** [Rule Reference](" + .helpUri + ")"))' results.sarif > tmp-results.sarif
-          jq '(.runs[].results[]?.suppressions[]?.kind) = "external"' tmp-results.sarif > results.sarif
-    
-    # Handle the SARIF results
-    - name: Upload SARIF file
-      id: upload
-      uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e
-      if: success() || failure()
+        docker build -t $IMAGE_NAME .
+
+    - name: Cortex CLI Image Scan
+      run: |
+        results=$(./cortexcli \
+          image scan \
+          --timeout 600 \
+          --name $IMAGE_NAME \
+          --ci-build-id "${{ github.run_number }}" \
+          --ci-pipeline-id "${{ github.repository }}" \
+          --output-format json \
+          $IMAGE_NAME)
+
+        echo "Storing results"
+        mkdir results
+        echo "$results" | sed -n 's/.*<SCAN_INTRO_START>\(.*\)<SCAN_INTRO_END>.*/\1/p' | jq . > results/scanIntro.json
+        echo "$results" | sed 's/<SCAN_INTRO_START>.*<SCAN_INTRO_END>//g' | sed '/^[[:space:]]*$/d' | jq . > "results/$OUTPUT_FILE"
+
+    - name: Uploade results
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        sarif_file: results.sarif
-        wait-for-processing: true
-        
-    - name: Dismiss alerts
-      if: github.ref == 'refs/heads/main'
-      uses: advanced-security/dismiss-alerts@046d6b48d2e43cf563f96f67332c47c432eff83e
-      with:
-        # specify a 'sarif-id' and directory containing SARIF files
-        sarif-id: ${{ steps.upload.outputs.sarif-id }}
-        sarif-file: results.sarif
-      env:
-        GITHUB_TOKEN: ${{ github.token }}   
-    
+        name: cwp-results
+        path: ./results
