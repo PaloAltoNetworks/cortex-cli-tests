@@ -47,6 +47,7 @@ jobs:
       
     - name: Run Cortex CLI Code Scan
       run: |
+        EXIT_CODE=0
         ./cortexcli \
           code scan \
           --directory "${{github.workspace}}" \
@@ -55,11 +56,12 @@ jobs:
           --source "GITHUB_ACTIONS" \
           --create-repo-if-missing \
           --output sarif \
-          --output-file-path "results.sarif"
+          --output-file-path "results.sarif" || EXIT_CODE=$?
           echo "Improve output"
           jq '(.runs[].tool.driver.rules[]? | select(.helpUri != null)) |= (.help.markdown = (.help.text + "\n\n**More Info:** [Rule Reference](" + .helpUri + ")"))' results.sarif > tmp-results.sarif
           jq '(.runs[].results[]?.suppressions[]?.kind) = "external"' tmp-results.sarif > results.sarif
-    
+          exit $EXIT_CODE
+          
     # Handle the SARIF results
     - name: Upload SARIF file
       id: upload
