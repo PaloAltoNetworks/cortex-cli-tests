@@ -54,7 +54,7 @@ jobs:
           --repo-id "${{github.repository}}" \
           --branch "${{github.ref_name}}" \
           --source "GITHUB_ACTIONS" \
-          --repo-url "${{github.server_url}}/${{github.repository}}" \
+          --create-repo-if-missing \
           --output sarif \
           --output-file-path "results.sarif" || EXIT_CODE=$?
         echo "Improve output"
