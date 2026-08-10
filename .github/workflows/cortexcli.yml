@@ -80,7 +80,8 @@ jobs:
         path: results.sarif
         
     - name: Dismiss alerts
-      if: github.ref == 'refs/heads/main'
+      #if: github.ref == 'refs/heads/main'
+      if: success() || failure()
       uses: advanced-security/dismiss-alerts@a18f986bdb40edba0dd7a74382c15d4a3d50a1c8
       with:
         # specify a 'sarif-id' and directory containing SARIF files
