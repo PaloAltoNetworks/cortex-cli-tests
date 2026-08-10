@@ -69,6 +69,14 @@ jobs:
         sarif_file: results.sarif
         wait-for-processing: true
         
+    # Upload output as artifact
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: success() || failure()
+      with:
+        name: results
+        path: results.sarif
+        
     - name: Dismiss alerts
       if: github.ref == 'refs/heads/main'
       uses: advanced-security/dismiss-alerts@a18f986bdb40edba0dd7a74382c15d4a3d50a1c8
