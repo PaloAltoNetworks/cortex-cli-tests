@@ -27,6 +27,27 @@ jobs:
     # Initial Setup
     - name: Checkout
       uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5
+      
+    - name: Fetch Dismissed Code Alerts from GitHub
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Query GitHub API for dismissed alerts and combine paginated pages into a single JSON array
+        gh api \
+          -H "Accept: application/vnd.github+json" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "/repos/${{ github.repository }}/code-scanning/alerts?state=dismissed" \
+          --paginate | jq -s 'add' > dismissed_alerts.json
+
+        echo "Fetched $(jq 'length' dismissed_alerts.json) dismissed alerts."
+
+    # Upload output as artifact
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: dismissed_alerts.json
+        path: dismissed_alerts.json
+        
 
     - name: Download cortexcli
       run: |
