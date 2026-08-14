@@ -47,6 +47,62 @@ jobs:
       with:
         name: dismissed_alerts.json
         path: dismissed_alerts.json
+
+    # Python script to match CortexCLI with GHAS
+    - name: Apply Cortex Skip Directives
+      run: | 
+        python3 -c '
+        import json, os
+        from collections import defaultdict
+  
+        with open("dismissed_alerts.json") as f:
+            alerts = json.load(f)
+  
+        cortex_alerts = [a for a in alerts if a.get("tool", {}).get("name") == "Cortex CLI"]
+        file_groups = defaultdict(list)
+  
+        for a in cortex_alerts:
+            path = a.get("most_recent_instance", {}).get("location", {}).get("path", "").lstrip("/")
+            if path:
+                file_groups[path].append(a)
+  
+        for path, alerts_list in file_groups.items():
+            if not os.path.exists(path):
+                continue
+  
+            # Sort descending by start_line
+            alerts_list.sort(
+                key=lambda x: x.get("most_recent_instance", {}).get("location", {}).get("start_line", 0),
+                reverse=True
+            )
+  
+            with open(path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+  
+            for alert in alerts_list:
+                rule_id = alert.get("rule", {}).get("id", "")
+                login = alert.get("dismissed_by", {}).get("login", "") if alert.get("dismissed_by") else ""
+                reason = alert.get("dismissed_reason", "") or ""
+                comment = alert.get("dismissed_comment") or ""
+  
+                comment_str = f"{login} - {reason}" + (f" - {comment}" if comment else "")
+                skip_line = f"# cortex:skip={rule_id}: {comment_str}\n"
+                prefix = f"# cortex:skip={rule_id}:"
+  
+                start_line = alert.get("most_recent_instance", {}).get("location", {}).get("start_line", 1)
+                idx = start_line - 1
+  
+                if 0 <= idx < len(lines):
+                    if lines[idx].strip().startswith(prefix):
+                        lines[idx] = skip_line
+                    else:
+                        lines.insert(idx, skip_line)
+                elif idx >= len(lines):
+                    lines.append(skip_line)
+  
+            with open(path, "w", encoding="utf-8") as f:
+                f.writelines(lines)
+        '
         
 
     - name: Download cortexcli
